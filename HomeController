@@ -1,0 +1,148 @@
+using Microsoft.Azure.Search.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web.Mvc;
+using System.Configuration;
+using System.Data.SqlClient;
+using Microsoft.ApplicationInsights;
+
+namespace SimpleSearchMVCApp.Controllers
+{
+    public class HomeController : Controller
+    {
+        private TelemetryClient _telemetry = new TelemetryClient();
+
+        //
+        // GET: /Home/
+        private FeaturesSearch _featuresSearch = new FeaturesSearch();
+
+        public ActionResult Index()
+        {
+            return View();
+        }
+
+        public ActionResult Search(string q = "", string buyername = "Unknown")
+        {
+
+           // If blank search, assume they want to search everything
+            if (string.IsNullOrWhiteSpace(q))
+                q = "*";
+
+            IList<SearchResult> searchResult = _featuresSearch.Search(q, buyername).Results;
+
+            var properties = new Dictionary<string, string>
+            {
+                {"SearchServiceName", "AuctionSearch"},
+                {"SearchId", Guid.NewGuid().ToString()},
+                {"IndexName", "auctionsearch"},
+                {"QueryTerms", q},
+                {"ResultCount", searchResult.Count.ToString()},
+                {"ScoringProfile", buyername}
+            };
+
+            _telemetry.TrackEvent("Search", properties);
+
+            return new JsonResult
+            {
+                JsonRequestBehavior = JsonRequestBehavior.AllowGet,
+                Data = searchResult
+            };
+        }
+
+        public ActionResult ClickSearch(string val = "", string buyername = "")
+        {
+            if (string.IsNullOrWhiteSpace(val) || string.IsNullOrWhiteSpace(buyername))
+                return null;
+
+            return _featuresSearch.clickSearch(val, buyername);
+        }
+
+        static string Tsql_SelectSuggestItems()
+        {
+            return @"
+            SELECT
+                SuggestItemId,
+	            VIN,
+	            ModelYear,
+	            Make,
+	            Model,
+	            Series,
+	            BodyStyle,
+	            Color,
+	            Mileage,
+	            BuyerName
+            FROM SuggestItem where BuyerName = @BuyerName;";
+        }
+
+        public ActionResult SuggestSearch(string s = "")
+        {
+            // If blank search, assume they want to search everything
+            if (string.IsNullOrWhiteSpace(s))
+            {
+                return null;
+            }
+            else
+            {
+                IList<SuggestItem> suggestItems = new List<SuggestItem>();
+
+                // Execute search based on query string
+                try
+                {
+                    using (var connection = new SqlConnection(ConfigurationManager.AppSettings["SqlConnectionString"]))
+                    {
+                        connection.Open();
+                        
+                        using (var command = new SqlCommand(Tsql_SelectSuggestItems(), connection))
+                        {
+                            command.Parameters.Add("@BuyerName", System.Data.SqlDbType.NVarChar);
+                            command.Parameters["@BuyerName"].Value = s;
+                            using (SqlDataReader reader = command.ExecuteReader())
+                            {
+                                while (reader.Read())
+                                {
+                                    SuggestItem d = new SuggestItem();
+                                    d.SuggestItemId = reader.GetString(0);
+                                    d.VIN = reader.IsDBNull(1) ? null : reader.GetString(1);
+                                    d.ModelYear = reader.IsDBNull(2) ? (Decimal?)null : reader.GetDecimal(2);
+                                    d.Make = reader.IsDBNull(3) ? null : reader.GetString(3);
+                                    d.Model = reader.IsDBNull(4) ? null : reader.GetString(4);
+                                    d.Series = reader.IsDBNull(5) ? null : reader.GetString(5);
+                                    d.BodyStype = reader.IsDBNull(6) ? null : reader.GetString(6);
+                                    d.Color = reader.IsDBNull(7) ? null : reader.GetString(7);
+                                    d.Mileage = reader.IsDBNull(8) ? (Decimal?)null : reader.GetDecimal(8);
+                                    d.BuyerName = reader.IsDBNull(9) ? null : reader.GetString(9);
+                                    suggestItems.Add(d);
+
+                                    var properties = new Dictionary<string, string>
+                                    {
+                                        {"SearchServiceName", "AuctionSearch"},
+                                        {"SearchId", Guid.NewGuid().ToString()},
+                                        {"IndexName", "auctionsearch"},
+                                        {"QueryTerms", "SuggestedItems"},
+                                        {"ResultCount", suggestItems.Count.ToString()},
+                                        {"ScoringProfile", s}
+                                    };
+
+                                    _telemetry.TrackEvent("Search", properties);
+                                }
+                                connection.Close();
+
+                                return new JsonResult
+                                {
+                                    JsonRequestBehavior = JsonRequestBehavior.AllowGet,
+                                    Data = suggestItems
+                                };
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQL Error querying index: {0}\r\n", ex.Message.ToString());
+                }
+                return null;
+            }
+        }
+    }
+}
