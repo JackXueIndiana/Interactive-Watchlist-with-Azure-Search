@@ -1,0 +1,212 @@
+@{
+    ViewBag.Title = "KAR Auction Search POC - Selected Feature Search";
+}
+
+<script src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.10.2.min.js"></script>
+<script type="text/javascript">
+    var ss;
+
+    function Search() {
+        // We will post to the MVC controller and parse the full results on the client side
+        // You may wish to do additional pre-processing on the data before sending it back to the client
+
+        if (ss == null)
+        {
+            return;
+        }
+
+        var q = $("#q").val();
+        $.post('/home/search',
+        {
+            q: q, buyername: ss
+        },
+        function (data) {
+            var searchResultsHTML = "<tr><td>#</td><td>AuctionUniqueID</td>";
+            searchResultsHTML += "<td>VIN</td>";
+            searchResultsHTML += "<td>ModelYear</td>";
+            searchResultsHTML += "<td>Make</td>";
+            searchResultsHTML += "<td>Model</td>";
+            searchResultsHTML += "<td>Series</td>";
+            searchResultsHTML += "<td>BodyStyle</td>";
+            searchResultsHTML += "<td>Color</td>";
+            searchResultsHTML += "<td>InteriorColor</td>";
+            searchResultsHTML += "<td>Mileage</td></tr>";
+            for (var i = 0; i < data.length; i++) {
+                searchResultsHTML += "<tr><td>" + i + "</td>";
+                searchResultsHTML += "<td onclick=\"this.style.backgroundColor='gray'; clickedSearch(this.innerHTML);\">" + data[i].Document.AuctionUniqueID + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.VIN + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.ModelYear + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.Make + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.Model + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.Series + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.BodyStyle + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.Color + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.InteriorColor + "</td>";
+                searchResultsHTML += "<td>" + data[i].Document.Mileage + "</td></tr>";
+            }
+
+            $("#searchResults").html(searchResultsHTML);
+
+        });
+
+        function parseJsonDate(jsonDateString) {
+            if (jsonDateString != null)
+                return new Date(parseInt(jsonDateString.replace('/Date(', '')));
+            else
+                return "No data";
+        }
+    };
+
+    function clickedSearch(val)
+    {
+        // We will post to the MVC controller and parse the full results on the client side
+        // You may wish to do additional pre-processing on the data before sending it back to the client
+        if (ss == null || val == null) {
+            return;
+        }
+
+        var q = $("#q").val();
+        $.post('/home/clicksearch',
+        {
+            val: val, buyername: ss
+        },
+        function (data) {
+            var suggestSearchResultsHTML = "<tr><td>#</td><td>SuggestItemId</td>";
+            suggestSearchResultsHTML += "<td>VIN</td>";
+            suggestSearchResultsHTML += "<td>ModelYear</td>";
+            suggestSearchResultsHTML += "<td>Make</td>";
+            suggestSearchResultsHTML += "<td>Model</td>";
+            suggestSearchResultsHTML += "<td>Series</td>";
+            suggestSearchResultsHTML += "<td>BodyStyle</td>";
+            suggestSearchResultsHTML += "<td>Color</td>";
+            suggestSearchResultsHTML += "<td>Mileage</td>";
+            suggestSearchResultsHTML += "<td>BuyerName</td></tr>";
+            if (data != null) {
+                for (var i = 0; i < data.length; i++) {
+                    suggestSearchResultsHTML += "<tr><td>" + i + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].SuggestItemId + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].VIN + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].ModelYear + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Make + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Model + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Series + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].BodyStyle + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Color + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Mileage + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].BuyerName + "</td></tr>";
+                }
+            }
+
+            $("#suggestSearchResults").html(suggestSearchResultsHTML);
+
+        });
+    };
+
+    function SuggestSearch() {
+        // We will post to the MVC controller and parse the full results on the client side
+        // You may wish to do additional pre-processing on the data before sending it back to the client
+        var s = $("#s").val();
+        ss = s;
+
+        $.post('/home/suggestsearch',
+        {
+            s: s
+        },
+        function (data) {
+            var suggestSearchResultsHTML = "<tr><td>#</td><td>SuggestItemId</td>";
+            suggestSearchResultsHTML += "<td>VIN</td>";
+            suggestSearchResultsHTML += "<td>ModelYear</td>";
+            suggestSearchResultsHTML += "<td>Make</td>";
+            suggestSearchResultsHTML += "<td>Model</td>";
+            suggestSearchResultsHTML += "<td>Series</td>";
+            suggestSearchResultsHTML += "<td>BodyStyle</td>";
+            suggestSearchResultsHTML += "<td>Color</td>";
+            suggestSearchResultsHTML += "<td>Mileage</td>";
+            suggestSearchResultsHTML += "<td>BuyerName</td></tr>";
+            if (data != null) {
+                for (var i = 0; i < data.length; i++) {
+                    suggestSearchResultsHTML += "<tr><td>" + i + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].SuggestItemId + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].VIN + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].ModelYear + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Make + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Model + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Series + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].BodyStyle + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Color + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].Mileage + "</td>";
+                    suggestSearchResultsHTML += "<td>" + data[i].BuyerName + "</td></tr>";
+                }
+            }
+
+            $("#suggestSearchResults").html(suggestSearchResultsHTML);
+
+        });
+    };
+
+</script>
+
+<head>
+    <img id="img_logo" alt="Logo" src="@Url.Content("http://www.autonews.com/apps/pbcsi.dll/storyimage/CA/20160218/RETAIL04/160219860/AR/0/AR-160219860.jpg")" width="auto" height="auto" />
+    <h2 style="color:#225B40"><center>POC - Selected Feature Search</center></h2>
+</head>
+<br />
+
+
+<body style="padding-left: 5%; padding-right:5%">
+
+    <!-- Retrieve Suggestions Panel -->
+    <div class="panel panel-primary" style="border:1px solid #225B40">
+        <div class="panel-heading" style="background-color:#225B40; color:white; border:1px solid #225B40">
+            Retrieve Suggested Items
+        </div>
+
+        <div class="panel-body" style="border:1px solid #225B40">
+            <div class="container">
+                <input type="text" placeholder="Enter buyer name to retrieve suggested items" name="s" id="s" autocomplete="off" size=100" />
+                <button onclick="SuggestSearch();" class="btn" style="background-color:#225B40; color:white">Retrieve</button>
+            </div>
+            <br />
+            <div class="container">
+                <div class="row">
+                    <table class="table table-striped table-bordered table-hover" id="suggestSearchResults"></table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <br />
+
+    <!-- Search terms panel -->
+
+    <div class="panel panel-primary" style="border:1px solid #225B40">
+        <div class="panel-heading" style="background-color:#225B40; color:white; border:1px solid #225B40">
+            Lookup Items
+        </div>
+
+        <div class="panel-body" style="border:1px solid #225B40">
+            <div class="container">
+                <input type="search" name="q" id="q" autocomplete="off" size="100" placeholder="Enter search term(s) for lookup" />
+                <button onclick="Search();" class="btn" style="background-color:#225B40; color:white">Search</button>
+            </div>
+            <br />
+            <div class="container">
+                <div class="row">
+                    <table class="table table-striped table-bordered table-hover" id="searchResults"></table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+
+<!-- jQuery library -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+
+<!-- Latest compiled JavaScript -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
