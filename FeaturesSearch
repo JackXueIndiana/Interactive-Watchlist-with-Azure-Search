@@ -1,0 +1,237 @@
+using System;
+using System.Configuration;
+using Microsoft.Azure.Search;
+using Microsoft.Azure.Search.Models;
+using System.Data.SqlClient;
+using System.Collections.Generic;
+using System.Web.Mvc;
+using Microsoft.ApplicationInsights;
+
+namespace SimpleSearchMVCApp
+{
+    public class FeaturesSearch
+    {
+        private static ISearchServiceClient _searchClient;
+        private static ISearchIndexClient _indexClient;
+        private TelemetryClient _telemetry = new TelemetryClient();
+
+        public static string errorMessage;
+
+        static FeaturesSearch()
+        {
+            try
+            {
+                string searchServiceName = ConfigurationManager.AppSettings["SearchServiceName"];
+                string apiKey = ConfigurationManager.AppSettings["SearchServiceApiKey"];
+
+                // Create an HTTP reference to the catalog index
+                _searchClient = new SearchServiceClient(searchServiceName, new SearchCredentials(apiKey));
+                _indexClient = _searchClient.Indexes.GetClient("auctionsearch");
+            }
+            catch (Exception e)
+            {
+                errorMessage = e.Message.ToString();
+            }
+        }
+
+
+        public DocumentSearchResult Search(string searchText, string buyername)
+        {
+            // Execute search based on query string
+            try
+            {
+                if (String.IsNullOrWhiteSpace(searchText) || searchText.Equals("*"))
+                {
+                    Console.WriteLine("No DB op needed.");
+                }
+                else
+                {
+                    try
+                    {
+                        using (var connection = new SqlConnection(ConfigurationManager.AppSettings["SqlConnectionString"]))
+                        {
+                            connection.Open();
+                            SqlCommand Cmd = new SqlCommand("If Not Exists(select SearchString, BuyerName from [dbo].[WatchItem] where SearchString = @SearchString AND BuyerName = @BuyerName) BEGIN " +
+                                        "INSERT INTO [dbo].[WatchItem] (SearchString, BuyerName) VALUES (@SearchString, @BuyerName); END;", connection);
+
+                            Cmd.Parameters.Add("@SearchString", System.Data.SqlDbType.NVarChar);
+                            Cmd.Parameters.Add("@BuyerName", System.Data.SqlDbType.NVarChar);
+
+                            Cmd.Parameters["@SearchString"].Value = searchText;
+                            Cmd.Parameters["@BuyerName"].Value = buyername;
+
+                            int RowsAffected = Cmd.ExecuteNonQuery();
+                            Console.Write("RowsAffected: ");
+                            Console.WriteLine("{0}", RowsAffected);
+
+                            connection.Close();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("SQL Error querying index: {0}\r\n", ex.Message.ToString());
+                    }
+                }
+
+                SearchParameters sp = new SearchParameters()
+                {
+                    SearchFields = new[] {
+                    //"AuctionUniqueID",
+                    "VIN",
+                    "ModelYear",
+                    "Make",
+                    "Model",
+                    "Series",
+                    "BodyStyle",
+                    "Color",
+                    "InteriorColor",
+                    "Mileage"},
+                    SearchMode = SearchMode.Any
+                };
+                DocumentSearchResult dsr = _indexClient.Documents.Search(searchText, sp);
+                
+                return dsr;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error querying index: {0}\r\n", ex.Message.ToString());
+            }
+            return null;
+        }
+
+        static string Tsql_SelectSuggestItems()
+        {
+            return @"
+            SELECT
+                SuggestItemId,
+	            VIN,
+	            ModelYear,
+	            Make,
+	            Model,
+	            Series,
+	            BodyStyle,
+	            Color,
+	            Mileage,
+	            BuyerName
+            FROM SuggestItem where BuyerName = @BuyerName;";
+        }
+
+        public JsonResult clickSearch(string val, string buyername)
+        {
+            // Execute search based on query string
+            try
+            {
+                SearchParameters sp = new SearchParameters()
+                {
+                    SearchFields = new[] { "AuctionUniqueID" },
+                    SearchMode = SearchMode.Any
+                };
+                DocumentSearchResult dsr = _indexClient.Documents.Search(val, sp);
+                if (dsr != null && dsr.Results.Count > 0)
+                {
+                    SearchResult sr = dsr.Results[0];
+
+                    Document d = sr.Document;
+
+                    var aproperties = new Dictionary<string, string> {
+                        {"SearchServiceName", "AuctionSearch"},
+                        {"SearchId", Guid.NewGuid().ToString()},
+                        {"ClickedDocId", (string)d["AuctionUniqueID"]},
+                        {"Rank", sr.Score.ToString()}
+                    };
+                    _telemetry.TrackEvent("Click", aproperties);
+
+                    Console.WriteLine("{0}", d["AuctionUniqueID"]);
+                    Console.WriteLine("{0}", d["VIN"]);
+                    Console.WriteLine("{0}", d["ModelYear"]);
+                    Console.WriteLine("{0}", d["Make"]);
+                    Console.WriteLine("{0}", d["Model"]);
+                    Console.WriteLine("{0}", d["Series"]);
+                    Console.WriteLine("{0}", d["BodyStyle"]);
+                    Console.WriteLine("{0}", d["Color"]);
+                    Console.WriteLine("{0}", d["InteriorColor"]);
+                    Console.WriteLine("{0}", d["Mileage"]);
+                    Console.WriteLine("{0}", buyername);
+
+                    var connection1 = new SqlConnection(ConfigurationManager.AppSettings["SqlConnectionString"]);
+                    connection1.Open();
+
+                    SqlCommand Cmd = new SqlCommand("If Not Exists(select * from [dbo].[SuggestItem] where SuggestItemId = @SuggestItemId AND BuyerName = @BuyerName) " +
+                    "Begin INSERT INTO [dbo].[SuggestItem] " +
+                    "(SuggestItemId, VIN, ModelYear, Make, Model, Series, BodyStyle, Color, Mileage, BuyerName) " +
+                    "VALUES(@SuggestItemId, @VIN, @ModelYear, @Make, @Model, @Series, @BodyStyle, @Color, @Mileage, @BuyerName); End", connection1);
+
+                    Cmd.Parameters.Add("@SuggestItemId", System.Data.SqlDbType.NVarChar);
+                    Cmd.Parameters.Add("@VIN", System.Data.SqlDbType.NVarChar);
+                    Cmd.Parameters.Add("@ModelYear", System.Data.SqlDbType.Decimal);
+                    Cmd.Parameters.Add("@Make", System.Data.SqlDbType.NVarChar);
+                    Cmd.Parameters.Add("@Model", System.Data.SqlDbType.NVarChar);
+                    Cmd.Parameters.Add("@Series", System.Data.SqlDbType.NVarChar);
+                    Cmd.Parameters.Add("@BodyStyle", System.Data.SqlDbType.NVarChar);
+                    Cmd.Parameters.Add("@Color", System.Data.SqlDbType.NVarChar);
+                    Cmd.Parameters.Add("@Mileage", System.Data.SqlDbType.Decimal);
+                    Cmd.Parameters.Add("@BuyerName", System.Data.SqlDbType.NVarChar);
+
+
+                    Cmd.Parameters["@SuggestItemId"].Value = d["AuctionUniqueID"];
+                    Cmd.Parameters["@VIN"].Value = d["VIN"];
+                    Cmd.Parameters["@ModelYear"].Value = d["ModelYear"];
+                    Cmd.Parameters["@Make"].Value = d["Make"];
+                    Cmd.Parameters["@Model"].Value = d["Model"];
+                    Cmd.Parameters["@Series"].Value = d["Series"];
+                    Cmd.Parameters["@BodyStyle"].Value = d["BodyStyle"];
+                    Cmd.Parameters["@Color"].Value = d["Color"];
+                    Cmd.Parameters["@Mileage"].Value = d["Mileage"];
+                    Cmd.Parameters["@BuyerName"].Value = buyername;
+
+                    int RowsAffected = Cmd.ExecuteNonQuery();
+                    Console.Write("RowsAffected: ");
+                    Console.WriteLine("{0}", RowsAffected);
+                    connection1.Close();
+
+                    using (var connection = new SqlConnection(ConfigurationManager.AppSettings["SqlConnectionString"]))
+                    {
+                        IList<SuggestItem> suggestItems = new List<SuggestItem>();
+
+                        connection.Open();
+                        using (var command = new SqlCommand(Tsql_SelectSuggestItems(), connection))
+                        {
+                            command.Parameters.Add("@BuyerName", System.Data.SqlDbType.NVarChar);
+                            command.Parameters["@BuyerName"].Value = buyername;
+                            using (SqlDataReader reader = command.ExecuteReader())
+                            {
+                                while (reader.Read())
+                                {
+                                    SuggestItem dd = new SuggestItem();
+                                    dd.SuggestItemId = reader.GetString(0);
+                                    dd.VIN = reader.IsDBNull(1) ? null : reader.GetString(1);
+                                    dd.ModelYear = reader.IsDBNull(2) ? (Decimal?)null : reader.GetDecimal(2);
+                                    dd.Make = reader.IsDBNull(3) ? null : reader.GetString(3);
+                                    dd.Model = reader.IsDBNull(4) ? null : reader.GetString(4);
+                                    dd.Series = reader.IsDBNull(5) ? null : reader.GetString(5);
+                                    dd.BodyStype = reader.IsDBNull(6) ? null : reader.GetString(6);
+                                    dd.Color = reader.IsDBNull(7) ? null : reader.GetString(7);
+                                    dd.Mileage = reader.IsDBNull(8) ? (Decimal?)null : reader.GetDecimal(8);
+                                    dd.BuyerName = reader.IsDBNull(9) ? null : reader.GetString(9);
+                                    suggestItems.Add(dd);
+                                }
+                                connection.Close();
+
+                                return new JsonResult
+                                {
+                                    JsonRequestBehavior = JsonRequestBehavior.AllowGet,
+                                    Data = suggestItems
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("SQL Error querying index: {0}\r\n", ex.Message.ToString());
+            }
+            return null;
+        }
+    }
+}
